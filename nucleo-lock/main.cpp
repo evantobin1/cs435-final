@@ -1,10 +1,10 @@
 #include "mbed.h"
 
 // Define the SPI pins for the Nucleo F401RE
-SPI spi(PA_7, PA_6, PA_5); // MOSI, MISO, SCK
+SPI spi(D11, D12, D13); // MOSI, MISO, SCK
 
 // Define the Slave Select pin if necessary, although for a single master/single slave setup it might not be needed.
-DigitalOut cs(PA_4); // Slave Select pin
+DigitalOut cs(D10); // Slave Select pin
 
 // Define the button pin
 InterruptIn button(BUTTON1); // Use the built-in user button
