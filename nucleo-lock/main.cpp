@@ -1,27 +1,86 @@
 #include "mbed.h"
 
+const char PASSCODE[] = {9, 3, 3, 1};
+
 // Define the SPI pins for the Nucleo F401RE
 SPI spi(D11, D12, D13); // MOSI, MISO, SCK
 
 // Define the Slave Select pin if necessary, although for a single master/single slave setup it might not be needed.
 DigitalOut cs(D10); // Slave Select pin
 
-// Define the button pin
-InterruptIn button(BUTTON1); // Use the built-in user button
+PwmOut servo (D3);
 
-// This function is called when the button is pressed
-void buttonPressed() {
-    cs = 0; // Select the slave device
+typedef enum {
+    PASSCODE_NOTRECIEVED,
+    PASSCODE_GOOD = 0x40,
+    PASSCODE_BAD = 0x80,
+} ResponseCode;
 
-    // Send some arbitrary bytes
+
+ResponseCode CheckPasscode()
+{
+    cs = 0;
     spi.write(0x22);
-    spi.write(0x01);
-    spi.write(0x01);
+    spi.write(0x02);
 
-    cs = 1; // Deselect the slave device
+    char length = spi.write(0x00);
 
-    printf("Data sent!\n");
+    char buffer[length]; 
+    for (int i = 0; i < length; i++)
+    {
+        buffer[i] = spi.write(0x00);
+    }
+
+    cs = 1;
+
+    if (length == 0)
+    {
+        return PASSCODE_NOTRECIEVED;
+    }
+
+    if (sizeof(buffer) != sizeof(PASSCODE))
+    {
+        return PASSCODE_BAD;
+    }
+
+    for (int i = 0; i < sizeof(PASSCODE) / sizeof(char); i++)
+    {
+        if (buffer[i] != PASSCODE[i])
+        {
+            return PASSCODE_BAD;
+        }
+    }
+    return PASSCODE_GOOD;
 }
+
+void SendResponse(ResponseCode response)
+{
+
+    if(response == PASSCODE_NOTRECIEVED)
+    {
+        return; // No need to send a response if they never even sent a passcode
+    }
+
+    cs = 0;                 // Pull slave select low
+    spi.write(0x22);        // Write header byte
+    spi.write(0x01);        // Write 'write' command
+    spi.write(0x01);        // Write length of '1'
+    spi.write(response);    // Write the response code
+    cs = 1;                 // Pull slave select high
+}
+
+
+void OpenDoor()
+{
+    servo.pulsewidth_us(1000);
+}
+
+void CloseDoor()
+{
+    servo.pulsewidth_us(2000);
+}
+
+
 
 int main() {
     // Set up the SPI interface
@@ -30,10 +89,26 @@ int main() {
 
     cs = 1; // Slave device not selected by default
 
-    // Attach the button press interrupt to the handler
-    button.fall(&buttonPressed);
+    servo.period_ms(20);
+
+    // Begin with the door closed
+    CloseDoor();
 
     while (true) {
-        ThisThread::sleep_for(1000ms); // Sleep thread
+        ThisThread::sleep_for(1s);
+
+        ResponseCode response = CheckPasscode();
+
+        if(response == PASSCODE_GOOD)
+        {
+            OpenDoor();
+        }
+
+        if(response == PASSCODE_BAD)
+        {
+            CloseDoor();
+        }
+
+        SendResponse(response);
     }
 }
