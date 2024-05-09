@@ -1,6 +1,6 @@
 #include "mbed.h"
 
-const char PASSCODE[] = {9, 3, 2, 1};
+const char PASSCODE[] = {9, 3, 3, 1};
 
 // Define the SPI pins for the Nucleo F401RE
 SPI spi(D11, D12, D13); // MOSI, MISO, SCK
@@ -52,6 +52,10 @@ ResponseCode CheckPasscode()
     {
         if (buffer[i] != PASSCODE[i])
         {
+            char test1 = buffer[0];
+            char test2 = buffer[1];
+            char test3 = buffer[2];
+            char test4 = buffer[3];
             return PASSCODE_BAD;
         }
     }

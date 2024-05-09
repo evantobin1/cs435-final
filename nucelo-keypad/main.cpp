@@ -1,16 +1,7 @@
 #include "mbed.h"
+#include "keypad.h"
+#include "NHD_0216HZ.h"
 
-const char PASSCODE[] = {9, 3, 3, 1};
-
-// Define the SPI pins for the Nucleo F401RE
-SPI spi(D11, D12, D13); // MOSI, MISO, SCK
-
-// Define the Slave Select pin if necessary, although for a single master/single slave setup it might not be needed.
-DigitalOut cs(D10); // Slave Select pin
-
-// Define the LEDs that will trigger when the passcode is correct/incorrect
-DigitalOut bad_led(D3);  // Red LED 
-DigitalOut good_led(D4); // Green LED
 
 typedef enum : char{
     PASSCODE_NOTRECEIVED = 0,
@@ -19,13 +10,17 @@ typedef enum : char{
 } ResponseCode;
 
 
-// TODO deleteme
-InterruptIn button(BUTTON1);
-volatile bool SHOULD_WRITE_PASSWORD = false;
-void ButtonPressed()
-{
-    SHOULD_WRITE_PASSWORD = true;
-}
+const char CODE_LEN = 0x04;
+
+unsigned char PasswordBuffer[4];
+unsigned char PasswordBuffer_Size = 0;
+
+SPI spi(D11, D12, D13); // SPI pins for the Nucleo F401RE... MOSI, MISO, SCK
+DigitalOut cs(D10); // Slave Select pin
+DigitalOut bad_led(D3);  // Red LED 
+DigitalOut good_led(D4); // Green LED
+Keypad keypad( PC_3,PC_2,PA_0,PA_1,PA_4,PB_0,PC_1,PC_0 ); // Keypad pins
+
 
 
 
@@ -65,11 +60,10 @@ ResponseCode CheckResponse()
     return PASSCODE_BAD;
 }
 
-void SendPasscode(const char* passcode)
+void SendPasscode(unsigned char* passcode)
 {
-    const char CODE_LEN = 0x04;
     cs = 0;                 // Pull slave select low
-    ThisThread::sleep_for(50ms);
+    ThisThread::sleep_for(100ms);
     spi.write(0x22);        // Write header byte
     ThisThread::sleep_for(50ms);
     spi.write(0x01);        // Write 'write' command
@@ -86,11 +80,27 @@ void SendPasscode(const char* passcode)
     cs = 1;                 // Pull slave select high
 }
 
+void ScanKeypad()
+{
+    unsigned char key = keypad.getKey();    
+    if(key != KEY_RELEASED)
+    {
+        if (PasswordBuffer_Size < CODE_LEN) 
+        {
+            PasswordBuffer[PasswordBuffer_Size++] = key - '0'; // Assuming ASCII input
+            char displayChar[2] = {key, '\0'};  // Create a string for display
+            print_lcd(&spi, displayChar);  // Display the character on the LCD
+            ThisThread::sleep_for(600ms); // delay between each button press
+        }
+    }
+}
 
 
-int main() {
+int main() {    
+    keypad.enablePullUp(); // Setup the keypad
+    
     // Set up the SPI interface
-    spi.format(8, 0); // 8 bits per frame, mode 0
+    spi.format(8, 3); // 8 bits per frame, mode 0
     spi.frequency(1000000); // 1 MHz
 
     cs = 1; // Slave device not selected by default
@@ -99,51 +109,54 @@ int main() {
     good_led = 0;
     bad_led = 0;
 
-    // TODO deleteme
-    button.fall(&ButtonPressed);
+    
+    init_spi(&spi); // Initialize the SPI interface
+    init_lcd(&spi); // Initialize the LCD
+    clear_lcd(&spi);
 
 
     while (true) {
-        ThisThread::sleep_for(50ms);
+        ThisThread::sleep_for(10ms);
+        ScanKeypad();
 
 
-        // TODO replace me with the keypad trigger stuff
-        if(SHOULD_WRITE_PASSWORD)
+        if(PasswordBuffer_Size >= CODE_LEN)
         {
-            SendPasscode(PASSCODE);
+            PasswordBuffer_Size = 0;
+            SendPasscode(PasswordBuffer);
 
-            SHOULD_WRITE_PASSWORD = false;
+            ThisThread::sleep_for(2s);
 
-            // char response;
+            char response = PASSCODE_NOTRECEIVED;
 
-            // int timeout_attempts = 3;
-            // while(timeout_attempts >= 0)
-            // {
-            //     response = CheckResponse();
-            //     timeout_attempts--;
-            //     response |= PASSCODE_NOTRECEIVED;
-            // }
+            int timeout_attempts = 3;
+            while(timeout_attempts >= 0 && response == PASSCODE_NOTRECEIVED)
+            {
+                response |= CheckResponse();
+                timeout_attempts--;
+                ThisThread::sleep_for(200ms);
+            }
 
-            // if(response == PASSCODE_NOTRECEIVED)
-            // {
-            //     // Error, passcode status was not received
-            //     continue;
-            // }
+            if(response == PASSCODE_NOTRECEIVED)
+            {
+                // Error, passcode status was not received
+                continue;
+            }
 
             
-            // if((response & PASSCODE_GOOD) != 0)
-            // {
-            //     good_led = 1;
-            //     ThisThread::sleep_for(2s);
-            //     good_led = 0;
-            // }
+            if((response & PASSCODE_GOOD) != 0)
+            {
+                good_led = 1;
+                ThisThread::sleep_for(2s);
+                good_led = 0;
+            }
 
-            // if((response & PASSCODE_BAD) != 0)
-            // {
-            //     bad_led = 1;
-            //     ThisThread::sleep_for(2s);
-            //     bad_led = 0;
-            // }
+            if((response & PASSCODE_BAD) != 0)
+            {
+                bad_led = 1;
+                ThisThread::sleep_for(2s);
+                bad_led = 0;
+            }
         }
 
     }

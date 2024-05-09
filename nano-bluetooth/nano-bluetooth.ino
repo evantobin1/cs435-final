@@ -122,22 +122,19 @@ void SetupCentral() {
       continue;
     }
 
-    centralCharacteristic.setEventHandler(BLENotify, OnBluetoothReceived);
-
-    if (centralCharacteristic.canSubscribe()) 
-    {
-      if (centralCharacteristic.subscribe()) 
-      {
-          Serial.println("Successfully subscribed to BLE notifications.");
-      } else 
-      {
-          Serial.println("Failed to subscribe to BLE notifications.");
-      }
-    } 
-    else {
-        Serial.println("Characteristic does not support subscriptions.");
+    centralCharacteristic = peripheral.characteristic(characteristicUuid);
+    if (!centralCharacteristic) {
+      Serial.println("* Peripheral device does not have the required characteristic!");
+      peripheral.disconnect();
+      continue;
     }
 
+    // Subscribe to notifications directly
+    centralCharacteristic.subscribe();
+    centralCharacteristic.setEventHandler(BLEWritten, OnBluetoothReceived);
+
+    digitalWrite(RDY_PIN, HIGH); // Indicate ready when connected
+    Serial.println("Central connected and subscribed to notifications.");
     break;
   }
 
@@ -171,7 +168,7 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(SS), slaveSelectAsserted, FALLING);
   SPI.begin();
-  SPI.beginTransaction(SPISettings(SPI_FREQUENCY, MSBFIRST, SPI_MODE0));
+  SPI.beginTransaction(SPISettings(SPI_FREQUENCY, MSBFIRST, SPI_MODE3));
 }
 
 void loop() {
@@ -194,8 +191,9 @@ void loop() {
 ERROR_TYPE ProcessReceivingData() {
   byte header_byte = SPI.transfer(0x00);
   if (header_byte != HEADER) {
-    Serial.println("Error Received from header...");
-    return ERROR_SPI;
+    Serial.print("Error Received from header... received: ");
+    Serial.println(header_byte);
+    // return ERROR_SPI;
   }
 
   byte command_byte = SPI.transfer(0x22);
@@ -216,7 +214,7 @@ ERROR_TYPE ProcessReceivingData() {
       }
       Serial.print("Sent ");
       Serial.print(BluetoothIncoming_Size);
-      Serial.println("bytes");
+      Serial.println(" bytes");
       BluetoothIncoming_Size = 0;
       break;
     }
