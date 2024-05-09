@@ -1,6 +1,6 @@
 #include "mbed.h"
 
-const char PASSCODE[] = {9, 3, 3, 1};
+const char PASSCODE[] = {9, 3, 2, 1};
 
 // Define the SPI pins for the Nucleo F401RE
 SPI spi(D11, D12, D13); // MOSI, MISO, SCK
@@ -20,15 +20,20 @@ typedef enum {
 ResponseCode CheckPasscode()
 {
     cs = 0;
+    ThisThread::sleep_for(50ms);
     spi.write(0x22);
+    ThisThread::sleep_for(50ms);
     spi.write(0x02);
+    ThisThread::sleep_for(50ms);
 
     char length = spi.write(0x00);
+    ThisThread::sleep_for(50ms);
 
     char buffer[length]; 
     for (int i = 0; i < length; i++)
     {
         buffer[i] = spi.write(0x00);
+        ThisThread::sleep_for(50ms);
     }
 
     cs = 1;
@@ -62,10 +67,15 @@ void SendResponse(ResponseCode response)
     }
 
     cs = 0;                 // Pull slave select low
+    ThisThread::sleep_for(50ms);
     spi.write(0x22);        // Write header byte
+    ThisThread::sleep_for(50ms);
     spi.write(0x01);        // Write 'write' command
+    ThisThread::sleep_for(50ms);
     spi.write(0x01);        // Write length of '1'
+    ThisThread::sleep_for(50ms);
     spi.write(response);    // Write the response code
+    ThisThread::sleep_for(50ms);
     cs = 1;                 // Pull slave select high
 }
 

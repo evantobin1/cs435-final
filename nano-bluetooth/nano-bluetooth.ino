@@ -28,8 +28,8 @@ const char* characteristicUuid = "87654321-4321-4321-4321-210987654321";
 
 volatile bool RECEIVING_DATA_SPI = false;
 BLE_ROLE role;
-static byte BluetoothIncoming[BUFFER_SIZE] = {0x40};
-static byte BluetoothIncoming_Size = 1;
+static byte BluetoothIncoming[BUFFER_SIZE];
+static byte BluetoothIncoming_Size = 0;
 
 BLEService peripheralService(serviceUuid);
 BLECharacteristic peripheralCharacteristic(characteristicUuid, BLERead | BLEWrite | BLENotify, 16);
@@ -42,9 +42,9 @@ void slaveSelectAsserted() {
 void SetupPeripheral() {
   BLE.setLocalName("Arduino Peripheral");
   BLE.setAdvertisedService(peripheralService);
+  peripheralCharacteristic.setEventHandler(BLEWritten, OnBluetoothReceived);
   peripheralService.addCharacteristic(peripheralCharacteristic);
   BLE.addService(peripheralService);
-  peripheralCharacteristic.setEventHandler(BLEWritten, OnBluetoothReceived);
   
   Serial.println("Peripheral setup complete, advertising service.");
   BLE.advertise(); 
@@ -122,7 +122,21 @@ void SetupCentral() {
       continue;
     }
 
-    centralCharacteristic.setEventHandler(BLEWritten, OnBluetoothReceived);
+    centralCharacteristic.setEventHandler(BLENotify, OnBluetoothReceived);
+
+    if (centralCharacteristic.canSubscribe()) 
+    {
+      if (centralCharacteristic.subscribe()) 
+      {
+          Serial.println("Successfully subscribed to BLE notifications.");
+      } else 
+      {
+          Serial.println("Failed to subscribe to BLE notifications.");
+      }
+    } 
+    else {
+        Serial.println("Characteristic does not support subscriptions.");
+    }
 
     break;
   }
@@ -136,7 +150,7 @@ void setup() {
   pinMode(RDY_PIN, OUTPUT);
   pinMode(SS, INPUT_PULLUP);
 
-  // delay(3000);
+  delay(3000);
   Serial.begin(9600);
 
   if (!BLE.begin()) {
@@ -162,10 +176,14 @@ void setup() {
 
 void loop() {
   if (RECEIVING_DATA_SPI) {
+    Serial.println("Reveiving SPI...");
     ERROR_TYPE error = ProcessReceivingData();
     RECEIVING_DATA_SPI = false;
     if (error != NO_ERRORS) {
       digitalWrite(RDY_PIN, LOW);
+      BluetoothIncoming_Size = 0;
+      delay(5000);
+      digitalWrite(RDY_PIN, HIGH);
     }
   }
 
@@ -196,12 +214,16 @@ ERROR_TYPE ProcessReceivingData() {
       for (int i = 0; i < BluetoothIncoming_Size; i++) {
         SPI.transfer(BluetoothIncoming[i]);
       }
+      Serial.print("Sent ");
+      Serial.print(BluetoothIncoming_Size);
+      Serial.println("bytes");
       BluetoothIncoming_Size = 0;
       break;
     }
     default:
       return ERROR_SPI;
   }
+
   return NO_ERRORS;
 }
 
@@ -209,16 +231,20 @@ ERROR_TYPE ProcessReceivingData() {
 
 void OnBluetoothReceived(BLEDevice central, BLECharacteristic characteristic) 
 {
-  const byte* dataReceived = characteristic.value();
-  size_t length = characteristic.valueLength();
-  Serial.println("Received: ");
-  for (size_t i = 0; i < length; i++) 
-  {
-    BluetoothIncoming[BluetoothIncoming_Size++] = dataReceived[i];
-    Serial.println(dataReceived[i]);
-    Serial.println(", ");
-  }
-  Serial.println("\n");
+    Serial.println("Notification received");
+    const byte* dataReceived = characteristic.value();
+    size_t length = characteristic.valueLength();
+    Serial.print("Received Length: ");
+    Serial.println(length);
+    Serial.print("Received Data: ");
+    for (size_t i = 0; i < length; i++) 
+    {
+        Serial.print(dataReceived[i], HEX);
+        Serial.print(" ");
+        BluetoothIncoming[i] = dataReceived[i];
+    }
+    BluetoothIncoming_Size = length;
+    Serial.println();
 }
 
 
@@ -227,7 +253,7 @@ void SendBluetoothData(byte length, byte* data) {
   bool success = false;
   if (BLE.connected()) {
     if (role == BLE_PERIPHERAL) {
-      success = peripheralCharacteristic.writeValue(data, length);
+      success = peripheralCharacteristic.writeValue(data, length, true); // Note the 'true' to indicate a notification
     } else if (role == BLE_CENTRAL) {
       success = centralCharacteristic.writeValue(data, length);
     }

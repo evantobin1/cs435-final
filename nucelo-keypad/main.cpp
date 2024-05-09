@@ -32,15 +32,20 @@ void ButtonPressed()
 ResponseCode CheckResponse()
 {
     cs = 0; // Assert slave select
+    ThisThread::sleep_for(50ms);
     spi.write(0x22); // Write header byte
+    ThisThread::sleep_for(50ms);
     spi.write(0x02); // Write read command
+    ThisThread::sleep_for(50ms);
     char length = spi.write(0x00); // Read in the length
+    ThisThread::sleep_for(50ms);
 
     // Read in all of the values from 0 -> length (should be only one value because response code is only one byte)
     char buffer[length]; 
     for (int i = 0; i < length; i++)
     {
         buffer[i] = spi.write(0x00);
+        ThisThread::sleep_for(50ms);
     }
 
     if(length == 0x00)
@@ -64,13 +69,18 @@ void SendPasscode(const char* passcode)
 {
     const char CODE_LEN = 0x04;
     cs = 0;                 // Pull slave select low
+    ThisThread::sleep_for(50ms);
     spi.write(0x22);        // Write header byte
+    ThisThread::sleep_for(50ms);
     spi.write(0x01);        // Write 'write' command
+    ThisThread::sleep_for(50ms);
     spi.write(CODE_LEN);    // Write length of '4'
+    ThisThread::sleep_for(50ms);
 
     for(int i = 0; i < CODE_LEN; i++)
     {
         spi.write(passcode[i]);    // Write the response code
+        ThisThread::sleep_for(50ms);
     }
 
     cs = 1;                 // Pull slave select high
@@ -94,7 +104,7 @@ int main() {
 
 
     while (true) {
-        ThisThread::sleep_for(1s);
+        ThisThread::sleep_for(50ms);
 
 
         // TODO replace me with the keypad trigger stuff
@@ -102,36 +112,38 @@ int main() {
         {
             SendPasscode(PASSCODE);
 
-            char response;
+            SHOULD_WRITE_PASSWORD = false;
 
-            int timeout_attempts = 3;
-            while(timeout_attempts >= 0)
-            {
-                response = CheckResponse();
-                timeout_attempts--;
-                response |= PASSCODE_NOTRECEIVED;
-            }
+            // char response;
 
-            if(response == PASSCODE_NOTRECEIVED)
-            {
-                // Error, passcode status was not received
-                continue;
-            }
+            // int timeout_attempts = 3;
+            // while(timeout_attempts >= 0)
+            // {
+            //     response = CheckResponse();
+            //     timeout_attempts--;
+            //     response |= PASSCODE_NOTRECEIVED;
+            // }
+
+            // if(response == PASSCODE_NOTRECEIVED)
+            // {
+            //     // Error, passcode status was not received
+            //     continue;
+            // }
 
             
-            if((response & PASSCODE_GOOD) != 0)
-            {
-                good_led = 1;
-                ThisThread::sleep_for(2s);
-                good_led = 0;
-            }
+            // if((response & PASSCODE_GOOD) != 0)
+            // {
+            //     good_led = 1;
+            //     ThisThread::sleep_for(2s);
+            //     good_led = 0;
+            // }
 
-            if((response & PASSCODE_BAD) != 0)
-            {
-                bad_led = 1;
-                ThisThread::sleep_for(2s);
-                bad_led = 0;
-            }
+            // if((response & PASSCODE_BAD) != 0)
+            // {
+            //     bad_led = 1;
+            //     ThisThread::sleep_for(2s);
+            //     bad_led = 0;
+            // }
         }
 
     }
